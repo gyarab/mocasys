@@ -1,0 +1,12 @@
+[submodule "frontend"]
+	path = frontend
+	url = git@github.com:gyarab/mocasys-frontend.git
+[submodule "middleend"]
+	path = middleend
+	url = git@github.com:gyarab/mocasys-middleend.git
+[submodule "hardware-sw"]
+	path = hardware-sw
+	url = git@github.com:gyarab/mocasys-hardware-sw.git
+[submodule "backend"]
+	path = backend
+	url = git@github.com:gyarab/mocasys-backend2.git
