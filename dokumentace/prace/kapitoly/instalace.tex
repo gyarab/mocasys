@@ -1,0 +1,54 @@
+\chapter{Instalace}
+
+Mocasys je komplexní projekt složený z několika částí, tudíž je instalace
+komplikovaný proces zahrnující vícero programovacích jazyků a prostředí.
+Momentálně je jediným podporovaným operačním systémem pro vývoj Mocasysu a
+spuštění serverových částí GNU/Linux.
+
+Tyto instrukce byly ověřeny na Arch Linuxu a balíčcích z května 2019. Návod
+předpokládá, že máte stažené všechny repozitáře projektu ve struktuře složek
+určené submoduly.
+
+\section{Instalace Backendu}
+
+\begin{itemize}
+    \item Nejprve nainstalujte PostgreSQL \citep[viz][]{PostgreSQL} verze 11 a
+    vytvořte prázdné databázové schéma.
+    
+    \item Stáhněte, zkompilujte a nainstalujte rozšíření PostgreSQL
+    temporal\_tables \citep[viz][]{TemporalTables}.
+
+    \item Ve složce \texttt{mocasys-backend} spusťte skript
+    \texttt{setup\_db.sh}. Skriptu můžete dát další parametry, které budou
+    předány použitému příkazu \texttt{psql}.
+\end{itemize}
+
+\section{Instalance Middleendu}
+
+\begin{itemize}
+    \item Nainstalujte Node.js \citep[viz][]{NodeJs} a NPM \citep[viz][]{Npm}.
+
+    \item Upravte soubor \texttt{mocasys-middleend/config/default.json} tak,
+    aby obsahoval správné nastavení pro připojení k databázi. Middleend využívá
+    dvě databázová spojení, \uv{middleend} a \uv{qdb}. \uv{Middleend} by měl
+    být připojen pomocí uživatele, který má přístup k tabulkám
+    \texttt{user\_passwords\_data} a \texttt{user\_mifare\_cards\_current}.
+    \uv{Qdb} používá uživatele \texttt{uptest}, který byl vytvořen skriptem
+    \texttt{setup\_db.sh}.
+
+    \item Ve složce \texttt{mocasys-middleend} spusťte příkaz
+    \verb|npm install|, což nainstaluje NPM balíčky, a
+    \texttt{npm run start}, což spustí server middleendu.
+\end{itemize}
+
+\section{Instalace Frontendu}
+
+\begin{itemize}
+    \item Nainstalujte SBT \citep[viz][]{Sbt}.
+
+    \item Ve složce \texttt{mocasys-frontend} spusťte příkaz \texttt{sbt
+    devel}, poté \texttt{devserver.py}, což spustí webserver hostující
+    aplikaci.
+
+    \item Navštivte ve webovém prohlížeči stránku \texttt{http://127.0.0.1:8080}.
+\end{itemize}

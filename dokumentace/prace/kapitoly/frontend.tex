@@ -1,0 +1,225 @@
+\chapter{Frontend} \label{frontend}
+
+
+Webové rozhraní Mocasysu je napsané jako SPA (z angl. Single Page Application)
+v jazyce Scala s využitím kompilátoru Scala.js. Byl vybudován na vlastním
+frameworku \uv{liwec}, který je sám postaven na JavaScript knihovně domvm
+\citep[viz][]{DomVm}. Využívá přístup \uv{virtual DOM} známý například z
+knihoven React a Vue.
+
+\section{Liwec}
+
+Liwec dělí aplikaci na tzv. komponenty, někdy nazývané widgety či zobrazení,
+které reprezentují jednotlivé soběstačné části grafického rozhraní. Komponenty
+jsou třídy dědící abstraktní třídu \texttt{Component}. Při změně jakéhokoliv
+atributu komponenty je spuštěna funcke \texttt{render()}, její výsledek
+porovnán s aktuálním stavem a změny vykresleny. Hlídání změn využívá
+\texttt{Proxy} \citep[viz][][MdnJsProxy], funkcionalitu JavaScriptu, která
+umožňuje obalit objekt a při jakémkoliv přísupu k objektu zavolat handler
+funkci.
+
+Liwec umožňuje programovat aplikace výhradně ve Scale. Obsahuje DSL (z angl.
+Domain Specific Language) pro tvorbu HTML a CSS, které využívají flexibilitu
+Scaly, což dovoluje mít pro jednu komponentu pouze jeden soubor bez nutnosti
+vkládat další jazyky jako text.
+
+HTML tagy jsou reprezentovány objekty, což dovoluje například vytvářet
+\uv{pseudo-komponenty} -- funkce, které dle daných parametrů vrátí HTML tag.
+Tyto funkce zabírají méně paměti než plné komponenty, nemohou ale udržovat
+vnitřní stav pomocí hlídaných atributů, plní tak jinou roli než plné komponenty.
+
+U CSS bývá problémem \uv{přelévání} stylů z jedné komponenty do druhé kvůli příliš
+širokým selektorům či sdíleným jménům tříd. Tento problém je někdy řešen
+komplikovanými vývojovými metodologiemi, liwec však implementuje \uv{scoped CSS},
+koncept převzatý z Vue. Každému DOM elementu je přidán atribut, který unikatně
+identifikuje komponentu, které je součástí. Ke každé části každého CSS selektoru
+je pak přidána ekvivalentní podmínka.
+
+CSS styly komponent jsou při kompilaci převedeny makrem na textovou reprezentaci
+a uloženy do souborů, poté sloučeny externím skriptem. Výsledná aplikace tak
+nemusí obsahovat kód na generování CSS.
+
+% TODO: Make this a floating figure
+\begin{code}
+class Counter(var i: Int = 1) extends Component {
+    def render() = scoped(div(
+            button("Increment",
+                   onClick := { _ => i += 1 }),
+            div(s"Counted to \$i")
+    ))
+    cssScoped { import liwec.cssDsl._
+        e.div (
+            color := "crimson",
+            fontSize := "20pt",
+        )
+    }
+}
+\end{code}
+
+\subsection{Interní struktura}
+
+Liwec je kompilován nástrojem SBT. Jeho tzv. projekt je rozdělen na několik dílčích projektů:
+
+\begin{itemize}
+	\item \emph{macros} obsahuje makra využívaná v DSL liwecu, konkrétně
+	\texttt{scoped} pro úpravu HTML pro \uv{scoped CSS}. Dále pak
+	\texttt{css} a \texttt{cssScoped}, makra pro zpracování CSS DSL.
+
+	\item \emph{htmlCodegen} a \emph{cssCodegen} jsou programy, které ze
+	stránek MDN získají data ve strukturované formě a vytvoří pak podle
+	nich třídy a funkce, které pak jsou součástí DSL.
+
+	\item \emph{liwec} obsahuje samotný kód obsažený v zkompilovaném výstupu,
+	mimo jiné typy pro DSL, reprezentaci knihovny \texttt{domvm} ve Scale
+	(tzv. \uv{binding}) a kód pro routování stránek dle URL.
+\end{itemize}
+
+\subsection{HTML DSL}
+
+Vytváření HTML komponent pomocí DSL, sady prvků jazyka tvořících vnořený
+\uv{jazyk}, je jednou z definujících vlastností liwecu. Tento přístup je
+inspirován mimo jiné JavaScript knihovnou Mithril \citep[viz][]{MithrilJs} a
+Scala knihovnou ScalaTags \citep[viz][]{ScalaTags}.
+
+DSL je implementováno pomocí různých funkcí Scaly, několik z nich exklusivních
+tomuto jazyku. Tagy jsou reprezentovány statickými objekty (konkrétně
+\texttt{lazy val}), které lze volat jako funcke akceptující libovolné množství
+argumentů a vracející objekt \texttt{Element\-VNode} z knihovny \texttt{domvm}.
+Tyto objekty lze chápat jako \uv{typesafe} wrappery funkce \texttt{el} z
+\texttt{domvm}.
+
+Argumenty tagů jsou instance \uv{vlastnosti} (angl. trait)
+\texttt{VNode\-Applicable[T]}, kde \texttt{T} je typ elementů, na které lze tuto
+instanci použít. Každá instance \texttt{VNode\-Applicable} má metodu
+\texttt{applyTo(vn: T): Unit}, která zmutuje předaný objekt. Instancí
+\texttt{VNode\-Applicable} jsou mimo jiné objekty reprezentující atributy tagů a
+jejich hodnoty a komponenty. Pomocí tzv. implicitních tříd lze pak jako
+\texttt{VNode\-Applicable} brát i například řetězce, další elementy a vybrané
+monády (\texttt{Seq} a \texttt{Option}), pokud obsahují další
+\texttt{VNode\-Applicable}.
+
+Atributy tagů jsou objekty, které po použití operátoru \texttt{:=} vrátí objekt
+reprezentující název atributu i jeho hodnotu. Tento objekt je instancí
+\texttt{VNode\-Applicable}, takže je možné jej použít jako argument tagů.
+
+\subsection{CSS DSL}
+
+Popis CSS pravidel v liwecu využívá objektů a vlastních operátorů k vytvoření
+AST (z angl. Abstract Syntax Tree, syntaktický strom). CSS selektory jsou
+reprezentovány instancemi \texttt{Selector}, které jsou vytvářeny primárně
+pomocí globálních \uv{dynamických objektů}. Díky funkci Scaly je
+\texttt{c.className} přetransformováno na \texttt{c.selectDynamic("className")},
+což je v liwecu funkce vracející selektor pro CSS třídu nazvanou
+\texttt{className}. Komplexní selektory lze pak vytvářet pomocí vlastních
+operátorů vlastnosti \texttt{Selector}.
+
+Selektor je možné buď zavolat jako funkci přímo, nebo zavolat jeho metodu
+\texttt{->}. Obě funkce berou libovolné množství parametrů: samotné CSS
+vlastnosti a další pravidla. Takto vzniklé pravidlo je pak zpracováno makry
+\texttt{css} a \texttt{cssScoped}.
+
+\section{Tabulky a formuláře}
+
+Velkou část Frontendu tvoří rutinní tabulky a formuláře, které skoro přesně
+odpovídají SQL tabulkám. Proto byly vytvořeny obecné třídy a funkce pro
+vytváření těchto konstruktů.
+
+Framework tabulek se skládá ze dvou vrstev. Nižší umožňuje z jakéhokoliv seznamu
+a specifických objektů sloupců vytvořit tabulku, druhá se pak zaměřuje na
+vytváření tabulek z libovolného SQL dotazu.
+
+Framework formulářů je navržen vesměs dynamicky. Jádrem každého formuláře je
+\texttt{Map[String, Any]}, slovník z řetězce na libovolný datový typ. Tento
+přístup sice znatelně ztěžuje ověřování správnosti kódu při kompilaci, výsledný
+kód je ale velmi krátký a framework nevyžaduje k funkčnosti žádná komplexní
+makra.
+
+\section{Hlavní menu}
+
+Menu můžeme reprezentovat rekurzivně dvojící tříd \verb|MenuItem|
+a \verb|SubMenu|. Obě tyto třídy dědí z traitu (interface v Javě) \verb|MenuNode|,
+což zjednodušuje psaní algoritmů, jenž využívají instance
+těchto tříd. Limitujeme tak počet případů.
+\verb|MenuItem| uchovává text odkazu a funkci, která se zavolá
+při kliknutí na odkaz.
+\verb|SubMenu| si uchovává \verb|MenuItem|
+seznam \verb|MenuNode|, abychom mohli menu reprezentovat rekurzivně.
+
+\begin{code}
+trait MenuNode
+class MenuItem(value: String, action: Event => Unit) extends MenuNode
+class SubMenu(item: MenuItem, children: Seq[MenuNode]) extends MenuNode
+\end{code}
+
+Celé menu můžeme předávat jako instanci \verb|SubMenu|.
+Menu pak vyrenderujeme procházením do hloubky přibližně takto:
+
+\begin{code}
+def renderMenu(node: SubMenu): liwec.htmlDsl.VNodeFrag =
+    for (child <- node.children) yield child match {
+        case menu: SubMenu => 
+            li(h4(menu.item.value, onClick := menu.item.action),
+                ul(renderMenu(menu)))
+        case item: MenuItem => 
+            li(item.value, onClick := item.action)
+    }
+\end{code}
+
+V implementaci je kořen menu renderován jinak kvůli stylování,
+princip ale zůstává stejný. Některé html atributy byly v ukázce kódu vynechány.
+
+\section{Globální stav}
+
+Stav aplikace udržuje instance třídy \verb|AppStateCls|, ke které se přistupuje skrz
+proměnnou \verb|AppState|. Zde jsou uloženy údaje jako uživatel, session token z
+Middleendu a instance \verb|ApiClient|. Dále poskytuje abstrakční vrstvu nad tímto api klientem,
+abychom mohli zachytávat chyby a zobrazovat je globálně jako \hyperref[userMessages]{zprávy uživateli}.
+
+\section{Zprávy uživateli} \label{userMessages}
+
+Zprávy uživateli (např. chybové) jsou renderované komponentou \verb|Messenger|, ke které lze
+přistupovat z \verb|AppState|. Zprávy jsou předávány jako instance traitu \verb|Message|,
+jenž po konkrétních třídách požaduje implementovat \verb|render| a \verb|duration|.
+
+Volitelná metoda traitu \verb|Message| \verb|setCancel| umožňuje obdržet funkci k ručnímu odstranění.
+Toho je například využíváno u zprávy \verb|OfflineMessage|, která se zobrazí,
+pokud uživatelovo zařízení ztratí připojení. Tj., když zavolá se \verb|offline| event.
+\verb|OfflineMessage| pak implementuje \verb|online| event, v jehož handleru zavolá předanou
+odstraňovací funkci.
+
+Skrz tento třídový návrh můžeme docílit různého stylování s např ikonami a dodatečnými akcemi.
+\verb|Messenger| si zprávy ukládá do slovníku \verb|Map[Int, Message]|, kde klíč je náhodně
+generovaný. Společně s přidáním do slovníku je vytvořen časovač pomocí funkce \verb|setTimeout|,
+která po uplynutém intervalu spustí předanou funkci k odstranění ze slovníku zpráv.
+Návratová hodnota funkce \verb|setTimeout| je handler, který když předáme funkci \verb|clearTimeout|,
+tak zrušíme odpočet.
+Datový typ \verb|duration| je \verb|Option[Int]| a pokud je hodnota této proměnné \verb|None|,
+zpráva nebude automaticky odstraněna.
+
+\section{Drag'n'drop operace}
+
+Některé stránky (přiřazování jídel, úprava permisí) využívají operaci drag'n'\-drop (česky táhni a pusť)
+k usnadnění a zpříjemnění uživatelského rozhraní. Táhnutý prvek musí implementovat událost
+\verb|ondragstart| a musí mít atribut \verb|draggable|. Místa, kam může být táhnutý prvek umístěn,
+pak musí implementovat události \verb|ondrop| a \verb|ondragover| \citep[viz][]{W3DnD}.
+Dále se hodí implementovat na \verb|ondragleave| na místě puštení, abychom mohli například
+vrátit bravu okraje na původní barvu, který jsme obarvili při \verb|ondragover|.
+
+\section{Umělecký styl}
+
+\begin{figure} \centering
+    \def\svgwidth{\columnwidth}
+    \input{mocasys_logo.pdf.tex}
+\caption{Logo Mocasys}
+\label{logoMocasys}
+\end{figure}
+
+\begin{figure} \centering
+    \includegraphics[width=145mm]{../img/maliwan}
+\caption{Paleta Frontendu}
+\label{colorScheme}
+\end{figure}
+
+Paleta barev byla inspirována výrobcem zbraní Maliwan v počítačové hře Borderlands \citep[viz][]{Maliwan}.
+Konečná paleta byla získána nástrojem s adresou \href{https://colormind.io}{colormind.io}, což je generátor palet
+využívající strojové učení. Finální paleta je vidět na obrázku~\ref{colorScheme}.

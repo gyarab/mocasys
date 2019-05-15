@@ -1,0 +1,22 @@
+%%% Fiktivní kapitola s ukázkami sazby
+
+\chapter{Architektura} \label{architektura}
+
+% Nějaký pěkný obrázek
+
+Mocasys se skládá z několika částí běžících na několika zařízeních.
+
+\begin{itemize}
+	\item \emph{\hyperref[backend]{Backend}} je samotná databáze systému. Je postavený na PostgreSQL.
+	Narozdíl od konvenčních návrhů posílají další vrstvy systému SQL příkazy
+	přímo do Backendu přes Middleend.
+	
+	\item \emph{\hyperref[middleend]{Middleend}} je vrstvou mezi ostatními částmi systému a Backendem.
+	Řeší přihlašování a je dostupný jako webová REST služba.
+
+	\item \emph{\hyperref[frontend]{Frontend}} je samotná webová aplikace. Je určena pro zaměstnance
+	jídelny i strávníky a běží přímo v prohlížeči jako JavaScript.
+
+	\item Výdejová čtečka je hardware určený k poloautomatickému výdeji
+	jídla. Po přiložení identifikátoru ukáže obsluze zvolené menu.
+\end{itemize}
